@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+{% block shell %}
+<div class="auth">
+  <section class="vis">
+    <a class="brand" href="/"><img src="{{ url_for('static', filename='logo.svg') }}" alt=""><div><b>Zetech Ballot</b><span>Electronic voting portal</span></div></a>
+    <div>
+      <h1>Pick your people. One tap, one vote.</h1>
+      <p>Log in with your admission number, read the manifestos and cast your vote from your phone. Results update live.</p>
+    </div>
+    <img class="photo" src="{{ url_for('static', filename='img/v1.jpg') }}" alt="A hand holding a phone with a ballot box and a Vote button">
+  </section>
+  <section class="side">
+    <div class="box">
+      <h2 style="font-size:1.8rem">Welcome back</h2>
+      <p class="muted">Log in with your admission number.</p>
+      {% for c, m in get_flashed_messages(with_categories=true) %}<div class="flash {{ c }}" role="status">{{ m }}</div>{% endfor %}
+      <form method="post" autocomplete="on">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label for="u">Admission number</label>
+        <input id="u" name="username" type="text" required autocomplete="username" placeholder="DIT-03-0084/2026">
+        <label for="p">Password</label>
+        <input id="p" name="password" type="password" required autocomplete="current-password">
+        <button class="btn block" type="submit">Log in</button>
+      </form>
+      <p class="center small muted" style="margin-top:18px">First time here? <a href="/activate"><b>Activate your account</b></a></p>
+    </div>
+  </section>
+</div>
+{% endblock %}

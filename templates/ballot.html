@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Ballot{% endblock %}
+{% block body %}
+{% set st = election.status %}
+{% if mode == 'delegates' %}
+<div class="head">
+  <div><h1>Choose your delegates</h1><p class="muted">{{ election.title }}. You can vote for a delegate from {{ me.department_name or 'your department' }}. The delegates of every department form the electoral college, which then votes for the executives. One vote, and it can't be changed.</p></div>
+  <span class="pill {{ 'ok live' if st == 'open' else 'warn' if st == 'paused' else 'bad' }}">{{ 'Open' if st == 'open' else 'Paused' if st == 'paused' else 'Closed' }}</span>
+</div>
+{% if st != 'open' %}<div class="flash">{{ 'Voting is paused. You can read the statements, but you can\'t vote right now.' if st == 'paused' else 'Delegate voting isn\'t open. You can read the statements below.' }}</div>{% endif %}
+{% if my_vote %}<div class="flash ok">Your delegate vote is recorded. Thank you!</div>{% endif %}
+{% if not me.department_name %}
+<section class="card"><div class="empty">Your department isn't set yet. Ask the Dean's office to add it.</div></section>
+{% elif not groups %}
+<section class="card"><div class="empty">No approved delegate candidates in {{ me.department_name }} yet.</div></section>
+{% else %}
+{% if not my_vote %}<form method="post" action="/vote/delegate" class="vote-form" data-pos="a delegate"><input type="hidden" name="csrf" value="{{ csrf }}">{% endif %}
+{% for g in groups %}
+<section class="pos card">
+  <div class="pos-head"><h2 style="margin:0">{{ g.name }} delegates</h2>
+    {% if g.name == me.department_name %}<span class="pill">Your department</span>{% endif %}</div>
+  <div class="cands">
+    {% for c in g.cands %}
+    {% if my_vote %}
+    <div class="cand done {{ 'mine' if c.delegate_candidate_id == my_vote }}" data-name="{{ c.full_name }}">
+      <div class="who"><span class="avatar lg">{% if c.photo_path %}<img src="/uploads/{{ c.photo_path }}" alt="">{% else %}{{ c.full_name|initials }}{% endif %}</span>
+        <div><b>{{ c.full_name }}</b><span>{{ 'Your pick' if c.delegate_candidate_id == my_vote else c.admission_number }}</span></div></div>
+      <p class="man">{{ c.statement }}</p>
+      {% if c.statement and c.statement|length > 110 %}<button type="button" class="linklike" data-read data-name="{{ c.full_name }}" data-role="Delegate candidate · {{ g.name }}" data-photo="{% if c.photo_path %}/uploads/{{ c.photo_path }}{% endif %}" data-text="{{ c.statement }}">Read full statement</button>{% endif %}
+    </div>
+    {% else %}
+    <label class="cand" data-name="{{ c.full_name }}">
+      <input type="radio" name="candidate_id" value="{{ c.delegate_candidate_id }}" required {{ 'disabled' if st != 'open' }}>
+      <span class="tick"></span>
+      <span class="who"><span class="avatar lg">{% if c.photo_path %}<img src="/uploads/{{ c.photo_path }}" alt="">{% else %}{{ c.full_name|initials }}{% endif %}</span>
+        <span><b>{{ c.full_name }}</b><span>{{ c.admission_number }}</span></span></span>
+      <p class="man">{{ c.statement }}</p>
+      {% if c.statement and c.statement|length > 110 %}<button type="button" class="linklike" data-read data-name="{{ c.full_name }}" data-role="Delegate candidate · {{ g.name }}" data-photo="{% if c.photo_path %}/uploads/{{ c.photo_path }}{% endif %}" data-text="{{ c.statement }}">Read full statement</button>{% endif %}
+    </label>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% if not my_vote %}<p><button class="btn red" type="submit" {{ 'disabled' if st != 'open' }}>Review &amp; cast my delegate vote</button></p></form>{% endif %}
+{% endif %}
+{% elif not is_del %}
+<div class="head"><div><h1>Executive ballot</h1><p class="muted">{{ election.title }}</p></div></div>
+<section class="card"><h2>Delegates only</h2>
+  <p>In this stage the elected delegates vote for the executives. Your department's delegates are voting for you.</p>
+  <a class="btn ghost" href="/leaders">See the delegates</a></section>
+{% else %}
+{% set ns = namespace(open=0) %}
+{% for p in positions %}{% if cands.get(p.position_id) and p.position_id not in mine %}{% set ns.open = ns.open + 1 %}{% endif %}{% endfor %}
+<div class="head">
+  <div><h1>Your ballot</h1><p class="muted">{{ election.title }}. Choose one candidate for each position, then cast all your votes with one button. You can read each full manifesto. A vote can't be changed once it is cast.</p></div>
+  <span class="pill {{ 'ok live' if st == 'open' else 'warn' if st == 'paused' else 'bad' }}">{{ 'Open' if st == 'open' else 'Paused' if st == 'paused' else 'Closed' }}</span>
+</div>
+{% if st != 'open' %}<div class="flash">{{ 'Voting is paused. You can read the manifestos, but you can\'t vote right now.' if st == 'paused' else 'Voting is closed. You can read the manifestos below.' }}</div>{% endif %}
+
+<form method="post" action="/vote/batch" id="batchForm">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+{% for p in positions %}
+{% set list = cands.get(p.position_id, []) %}
+<section class="pos card" {% if list and p.position_id not in mine and st == 'open' %}data-pos="{{ p.position_name }}"{% endif %}>
+  <div class="pos-head">
+    <h2 style="margin:0">{{ p.position_name }}</h2>
+    {% if p.position_id in mine %}<span class="pill ok">Vote recorded</span>{% endif %}
+  </div>
+  {% if not list %}
+    <div class="empty">No approved candidates for this position yet.</div>
+  {% else %}
+    <div class="cands">
+      {% for c in list %}
+      {% if p.position_id in mine %}
+      <div class="cand done {{ 'mine' if c.candidate_id == mine[p.position_id] }}" data-name="{{ c.full_name }}">
+        <div class="who"><span class="avatar lg">{% if c.photo_path %}<img src="/uploads/{{ c.photo_path }}" alt="">{% else %}{{ c.full_name|initials }}{% endif %}</span>
+          <div><b>{{ c.full_name }}</b><span>{{ 'Your pick' if c.candidate_id == mine[p.position_id] else c.admission_number }}</span></div></div>
+        <p class="man">{{ c.manifesto }}</p>
+        {% if c.manifesto and c.manifesto|length > 110 %}<button type="button" class="linklike" data-read data-name="{{ c.full_name }}" data-role="{{ p.position_name }} candidate" data-photo="{% if c.photo_path %}/uploads/{{ c.photo_path }}{% endif %}" data-text="{{ c.manifesto }}">Read full manifesto</button>{% endif %}
+      </div>
+      {% else %}
+      <label class="cand" data-name="{{ c.full_name }}">
+        <input type="radio" name="pos_{{ p.position_id }}" value="{{ c.candidate_id }}" {{ 'disabled' if st != 'open' }}>
+        <span class="tick"></span>
+        <span class="who"><span class="avatar lg">{% if c.photo_path %}<img src="/uploads/{{ c.photo_path }}" alt="">{% else %}{{ c.full_name|initials }}{% endif %}</span>
+          <span><b>{{ c.full_name }}</b><span>{{ c.admission_number }}</span></span></span>
+        <p class="man">{{ c.manifesto }}</p>
+        {% if c.manifesto and c.manifesto|length > 110 %}<button type="button" class="linklike" data-read data-name="{{ c.full_name }}" data-role="{{ p.position_name }} candidate" data-photo="{% if c.photo_path %}/uploads/{{ c.photo_path }}{% endif %}" data-text="{{ c.manifesto }}">Read full manifesto</button>{% endif %}
+      </label>
+      {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endfor %}
+{% if ns.open and st == 'open' %}
+<div class="castbar" id="castBar">
+  <div class="meter"><b id="castLabel">0 of {{ ns.open }} positions chosen</b><div class="track thick"><div class="fill" id="castFill" style="width:0"></div></div></div>
+  <button class="btn red" id="castAll" type="submit" disabled>Review &amp; cast my votes</button>
+</div>
+{% endif %}
+</form>
+{% endif %}
+{% endblock %}

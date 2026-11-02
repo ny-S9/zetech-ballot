@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Live results{% endblock %}
+{% block body %}
+<div class="head">
+  <div><h1>Live results</h1><p class="muted" id="title">Loading…</p></div>
+  <div><span class="pill" id="status">…</span> <button class="btn sm ghost" id="refreshBtn" type="button">Refresh now</button></div>
+</div>
+<div class="stats">
+  <div class="stat"><b id="tp">–</b><span id="tt">Turnout</span></div>
+  <div class="stat red"><b id="tv">–</b><span>Votes cast in total</span></div>
+  <div class="stat"><b id="up" style="font-size:1.3rem;padding-top:8px">–</b><span>Refreshes every 5 seconds</span></div>
+</div>
+<div id="out"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const $=id=>document.getElementById(id);
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
+function ini(n){const p=n.split(' ');return(p[0][0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase()}
+const plural=(n,w)=>n+(n===1?' '+w:' '+w+'s');
+function avatar(photo,name){const av=el('span','avatar sm');if(photo){const im=document.createElement('img');im.src='/uploads/'+encodeURIComponent(photo);im.alt='';av.append(im)}else av.textContent=ini(name);return av}
+let sig='',refs={};
+/* The page is drawn once. After that only the numbers (and bar widths) change, so nothing blinks. */
+function structure(d){return JSON.stringify([d.kind,d.scope,(d.declared_delegates||[]).map(g=>[g.id,g.members.map(m=>m.name)]),
+  d.groups.map(p=>[p.id,p.seats,p.candidates.map(c=>c.id).sort((a,b)=>a-b)])])}
+function build(d){
+  const out=$('out');out.replaceChildren();refs={};
+  if(d.declared_delegates&&d.declared_delegates.length){
+    const dcard=el('section','card res static');
+    const many=d.declared_delegates.some(g=>g.members.length>1)||d.declared_delegates.length>1;
+    const dh=el('div','pos-head');dh.append(el('h2','',d.scope==='own'?(d.declared_delegates[0].members.length>1?'Your declared delegates':'Your declared delegate'):(many?'Declared delegates':'Declared delegate')));
+    dh.append(el('span','pill ok','Declared'));dcard.append(dh);
+    d.declared_delegates.forEach(g=>{
+      if(d.scope!=='own')dcard.append(el('h3','',g.name));
+      g.members.forEach(m=>{
+        const row=el('div','bar-row'),body=el('div'),t=el('div','bar-top');
+        t.append(el('span','',m.name),el('span','',g.name+' \u00b7 '+plural(m.votes,'vote')));
+        body.append(t);row.append(avatar(m.photo,m.name),body);dcard.append(row);
+      });
+    });
+    out.append(dcard);
+  }
+  d.groups.forEach(p=>{
+    const card=el('section','card res static'),h=el('div','pos-head');h.append(el('h2','',p.name));
+    const tags=el('span'),total=el('span','pill','');
+    if(d.kind==='delegates'&&p.seats!=null)tags.append(el('span','pill',plural(p.seats,'seat')),document.createTextNode(' '));
+    tags.append(total);h.append(tags);card.append(h);
+    if(!p.candidates.length)card.append(el('div','empty','No approved candidates yet.'));
+    const r=refs[p.id]={card,total,rows:{}};
+    p.candidates.forEach(c=>{
+      const row=el('div','bar-row'),body=el('div'),t=el('div','bar-top'),vote=el('span','','');
+      row.dataset.id=c.id;t.append(el('span','',c.name),vote);
+      const tr=el('div','track'),fill=el('div','fill');fill.style.width='0%';tr.append(fill);
+      body.append(t,tr);row.append(avatar(c.photo,c.name),body);card.append(row);
+      r.rows[c.id]={row,vote,fill};
+    });
+    out.append(card);
+  });
+}
+function update(d){
+  d.groups.forEach(p=>{
+    const r=refs[p.id];if(!r)return;
+    r.total.textContent=plural(p.total,'vote');
+    const top=p.candidates.length?p.candidates[0].votes:0;
+    p.candidates.forEach((c,i)=>{
+      const x=r.rows[c.id];if(!x)return;
+      const txt=c.votes+' \u00b7 '+c.pct+'%';if(x.vote.textContent!==txt)x.vote.textContent=txt;
+      const w=c.pct+'%';if(x.fill.style.width!==w)x.fill.style.width=w;
+      x.fill.classList.toggle('lead',(d.kind==='delegates'&&p.seats!=null)?(i<p.seats&&c.votes>0):(top>0&&c.votes===top));
+    });
+    const want=p.candidates.map(c=>c.id).join(),have=Array.from(r.card.querySelectorAll('.bar-row')).map(n=>n.dataset.id).join();
+    if(want!==have)p.candidates.forEach(c=>r.card.append(r.rows[c.id].row));   // someone moved up: move the row, do not redraw
+  });
+}
+function render(d){
+  const stageName={delegates:'Stage 1: delegates',executives:'Stage 2: executives',declared:'Declared'}[d.election.stage];
+  const set=(id,v)=>{const e=$(id);if(e.textContent!==v)e.textContent=v};
+  set('title',d.election.title+' \u00b7 '+stageName);
+  const s=$('status'),m={open:['Voting open','ok live'],paused:['Paused','warn'],closed:['Closed','bad']}[d.election.status];
+  set('status',m[0]);if(s.className!=='pill '+m[1])s.className='pill '+m[1];
+  set('tp',d.turnout.pct+'%');
+  set('tt',(d.kind==='delegates'?'Turnout: ':'Delegate turnout: ')+d.turnout.voters+' of '+d.turnout.total+(d.kind==='delegates'?' students':' delegates'));
+  set('tv',String(d.total_votes));
+  set('up','Updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+  const s2=structure(d);
+  if(s2!==sig){sig=s2;build(d);void $('out').offsetWidth}   // bars start at 0 and grow smoothly the first time
+  update(d);
+}
+async function load(){try{const r=await fetch('/api/results');if(r.status===200){render(await r.json())}else if(r.redirected){location.href='/login'}}catch(e){}}
+load();setInterval(load,5000);document.getElementById('refreshBtn').onclick=load;
+</script>
+{% endblock %}

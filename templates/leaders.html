@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Our leaders{% endblock %}
+{% block body %}
+<div class="head"><div><h1>Our leaders</h1><p class="muted">{{ election.title }}</p></div>
+  <span class="pill {{ 'ok' if election.stage == 'declared' else 'warn' }}">{{ 'Results declared' if election.stage == 'declared' else 'Election in progress' }}</span></div>
+
+<h2>Executives</h2>
+{% if execs %}
+<div class="cands" style="margin-bottom:30px">
+  {% for l in execs %}
+  <div class="cand done mine">
+    <div class="who"><span class="avatar lg">{% if l.photo_path %}<img src="/uploads/{{ l.photo_path }}" alt="">{% else %}{{ l.full_name|initials }}{% endif %}</span>
+      <div><b>{{ l.full_name }}</b><span>{{ l.position_name }}</span></div></div>
+    <p class="man">{{ l.manifesto }}</p>
+    {% if l.manifesto and l.manifesto|length > 110 %}<button type="button" class="linklike" data-read data-name="{{ l.full_name }}" data-role="{{ l.position_name }}" data-photo="{% if l.photo_path %}/uploads/{{ l.photo_path }}{% endif %}" data-text="{{ l.manifesto }}">Read full manifesto</button>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% if vacant %}<p class="muted small">No winner yet for: {{ vacant|join(', ') }}.</p>{% endif %}
+{% else %}
+<div class="empty" style="margin-bottom:30px">The executives will appear here once the Dean's office declares the results.</div>
+{% endif %}
+
+<h2>{% if dept_only %}Delegates of {{ dept_name or 'your department' }}{% else %}Electoral college delegates{% endif %}</h2>
+{% if groups %}
+<div class="grid g3">
+  {% for dept, members in groups.items() %}
+  <section class="card" style="margin:0">
+    <h3>{{ dept }}</h3>
+    {% for m in members %}
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)">
+      <span class="avatar">{% if m.photo_path %}<img src="/uploads/{{ m.photo_path }}" alt="">{% else %}{{ m.full_name|initials }}{% endif %}</span>
+      <b>{{ m.full_name }}</b>
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">The delegates will appear here once the Dean's office declares the first stage.</div>
+{% endif %}
+{% endblock %}

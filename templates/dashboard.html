@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block body %}
+{% set st = election.status %}
+{% set stage = election.stage %}
+{% if stage == 'declared' %}{% set label = 'Results declared' %}{% set cls = 'ok' %}
+{% elif st == 'open' %}{% set label = ('Delegate voting is open' if stage == 'delegates' else 'Executive voting is open') %}{% set cls = 'ok live' %}
+{% elif st == 'paused' %}{% set label = 'Voting is paused' %}{% set cls = 'warn' %}
+{% else %}{% set label = ('Delegate voting is closed' if stage == 'delegates' else 'Executive voting is closed') %}{% set cls = 'bad' %}{% endif %}
+<section class="hero">
+  <div class="txt">
+    <span class="pill {{ cls }}">{{ label }}</span>
+    {% if stage == 'declared' %}
+      <h1 style="margin-top:14px">Hi {{ user_name.split()[0] }}, your leaders are in!</h1>
+      <p>{{ election.title }}. The results are declared. Meet the executives and the delegates of every department.</p>
+      <div class="row"><a class="btn red" href="/leaders">Meet our leaders</a></div>
+    {% elif stage == 'delegates' %}
+      <h1 style="margin-top:14px">Hi {{ user_name.split()[0] }}, {{ 'choose your delegates!' if st == 'open' else 'welcome in.' }}</h1>
+      <p>{{ election.title }}.
+        {% if not me.department_name %}Your department isn't set yet. Ask the Dean's office to add it.
+        {% elif st == 'open' %}Vote for who will represent {{ me.department_name }} in the electoral college. The delegates then choose the executives.
+        {% elif st == 'paused' %}The Dean's office paused voting. Check back soon.
+        {% else %}Delegate voting isn't open yet. You can apply to run as a delegate{% if me.department_name %} for {{ me.department_name }}{% endif %} or for an executive seat.{% endif %}</p>
+      <div class="row">
+        {% if st == 'open' and me.department_name %}<a class="btn red" href="/ballot">Go to my ballot</a>{% else %}<a class="btn red" href="/apply/delegate">Run as delegate</a>{% endif %}
+        {% if show_live %}<a class="btn ghost" href="/results">See live results</a>{% endif %}
+      </div>
+    {% else %}
+      <h1 style="margin-top:14px">Hi {{ user_name.split()[0] }}, {{ 'delegates, it\'s your turn!' if is_del and st == 'open' else 'welcome in.' }}</h1>
+      <p>{{ election.title }}.
+        {% if is_del %}You are an elected delegate for {{ me.department_name }}. {{ 'Cast one vote per executive position.' if st == 'open' else 'Executive voting will open soon.' }}
+        {% else %}Your department's delegates are choosing the executives. You can see who the delegates are.{% endif %}</p>
+      <div class="row">
+        {% if is_del and st == 'open' %}<a class="btn red" href="/ballot">Go to my ballot</a>{% else %}<a class="btn red" href="/leaders">See the delegates</a>{% endif %}
+        {% if show_live %}<a class="btn ghost" href="/results">See live results</a>{% endif %}
+      </div>
+    {% endif %}
+  </div>
+  <div class="pic"><img src="{{ url_for('static', filename='img/v1.jpg') }}" alt="A hand holding a phone with a ballot box and a Vote button"></div>
+</section>
+
+<div class="stats">
+  {% if stage == 'delegates' %}
+    <div class="stat"><b style="font-size:1.35rem;padding-top:8px">{{ 'Done' if dvote else 'Not yet' }}</b><span>Your delegate vote</span></div>
+    <div class="stat red"><b>{{ n_dcands }}</b><span>Delegate candidates in {{ me.department_name or 'your department' }}</span></div>
+  {% else %}
+    <div class="stat"><b>{{ mine|length }}/{{ positions|length }}</b><span>{{ 'Positions you voted for' if is_del else 'Executive votes (delegates only)' }}</span></div>
+    <div class="stat red"><b>{{ n_cands }}</b><span>Executive candidates on the ballot</span></div>
+  {% endif %}
+  <div class="stat"><b>{{ t.pct }}%</b><span>Turnout so far ({{ t.voters }} of {{ t.total }})</span></div>
+  <div class="stat"><b style="font-size:1.35rem;padding-top:8px">{{ me.department_name or 'Not set' }}</b><span>Your department{{ ' · Delegate' if is_del }}</span></div>
+</div>
+
+<div class="grid g2">
+  <section class="card">
+    {% if stage == 'delegates' %}
+      <h2>Your delegate vote</h2>
+      <p class="muted small">Every student votes once for a delegate from their own department.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+        <b>{{ me.department_name or 'No department' }}</b>
+        {% if dvote %}<span class="pill ok">Voted for {{ dvote.full_name }}</span>{% else %}<span class="pill warn">Not yet</span>{% endif %}
+      </div>
+      {% if st == 'open' and me.department_name %}<p style="margin-top:18px"><a class="btn" href="/ballot">Open ballot</a></p>{% endif %}
+    {% else %}
+      <h2>Your ballot</h2>
+      <p class="muted small">{{ 'Each position needs its own vote.' if is_del else 'Only elected delegates vote for the executives.' }}</p>
+      {% if is_del %}
+        {% for p in positions %}
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+          <b>{{ p.position_name }}</b>
+          {% if p.position_id in mine %}<span class="pill ok">Voted for {{ mine[p.position_id] }}</span>
+          {% else %}<span class="pill warn">Not yet</span>{% endif %}
+        </div>
+        {% endfor %}
+        {% if st == 'open' and stage == 'executives' %}<p style="margin-top:18px"><a class="btn" href="/ballot">Open ballot</a></p>{% endif %}
+      {% else %}
+        <p><a class="btn ghost" href="/leaders">See the delegates and leaders</a></p>
+      {% endif %}
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Run for office</h2>
+    <p><b>Executive:</b>
+      {% if app_row %}{{ app_row.position_name }} · <span class="pill {{ 'ok' if app_row.status == 'approved' else 'bad' if app_row.status == 'rejected' else 'warn' }}">{{ app_row.status|capitalize }}</span>{% else %}<span class="muted">Not applied</span>{% endif %}</p>
+    <p><b>Delegate:</b>
+      {% if dapp_row %}{{ me.department_name }} · <span class="pill {{ 'ok' if dapp_row.status == 'approved' else 'bad' if dapp_row.status == 'rejected' else 'warn' }}">{{ dapp_row.status|capitalize }}</span>{% else %}<span class="muted">Not applied</span>{% endif %}</p>
+    <p class="muted small">The Dean's office reviews every application.</p>
+    <div class="acts">{% if dapp_row and not app_row %}<span class="muted small">Executive applications are closed to delegate applicants.</span>{% else %}<a class="btn ghost" href="/apply">{{ 'Executive application' if app_row else 'Apply for executive' }}</a>{% endif %}
+      <a class="btn ghost" href="/apply/delegate">{{ 'Delegate application' if dapp_row else 'Apply as delegate' }}</a></div>
+  </section>
+</div>
+<section class="card" style="margin-top:6px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+  <div><h2 style="margin:0 0 4px">Questions, ideas or a concern?</h2><p class="muted" style="margin:0">Tell the Dean's office. You can stay anonymous.</p></div>
+  <a class="btn ghost" href="/contact">Contact us</a>
+</section>
+{% endblock %}

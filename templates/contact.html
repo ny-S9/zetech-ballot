@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Contact us{% endblock %}
+{% block body %}
+<div class="head"><div><h1>Contact us</h1>
+<p class="muted">Share feedback, a concern or a suggestion with the Dean's office. You can stay anonymous.</p></div></div>
+<div class="contact-grid">
+<section class="card">
+  <form method="post" action="/contact" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <label>What is this about?</label>
+    <div class="types">
+      {% for k, v in types %}<label><input type="radio" name="category" value="{{ k }}" {{ 'checked' if (form and form.category == k) or (not form and k == 'feedback') }}><span>{{ v }}</span></label>{% endfor %}
+    </div>
+    <label for="msg">Your message</label>
+    <textarea id="msg" name="message" maxlength="2000" required placeholder="Tell us what's on your mind. For example: how voting went for you, something that confused you, or an idea to make the election better.">{{ form.message if form else '' }}</textarea>
+    <label class="check"><input type="checkbox" id="anonBox" name="anonymous" value="1" {{ 'checked' if (not form) or form.anonymous }}><span>Send anonymously</span></label>
+    <div id="privacyNote" class="privacy"></div>
+    <div id="idFields" class="id-fields" hidden>
+      <div class="inline">
+        <div><label for="senderName">Your name (optional)</label><input id="senderName" name="sender_name" type="text" maxlength="150" value="{{ form.sender_name if form else '' }}"></div>
+        <div><label for="senderAdm">Admission number (optional)</label><input id="senderAdm" name="sender_admission" type="text" maxlength="40" value="{{ form.sender_admission if form else '' }}"></div>
+      </div>
+      <p class="hint"><button type="button" class="linklike" id="useMine" data-name="{{ me.full_name }}" data-adm="{{ me.admission_number }}">Fill in my own details</button></p>
+    </div>
+    <button class="btn red" type="submit">Send to the Dean's office</button>
+  </form>
+</section>
+<section class="card">
+  <h2>What happens next</h2>
+  <ol style="padding-left:20px;margin:0">
+    <li>Your message goes straight to the Dean's office.</li>
+    <li>They read it and mark it as read or resolved.</li>
+    <li>Anonymous messages keep no trace of who sent them.</li>
+  </ol>
+  <p class="hint" style="margin-top:16px">Please keep it respectful. For something urgent about your own account, such as a login problem, include your admission number so the Dean's office can help you.</p>
+</section>
+</div>
+{% endblock %}

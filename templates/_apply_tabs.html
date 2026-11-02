@@ -1,0 +1,4 @@
+<nav class="subnav" aria-label="Application type">
+  <a href="/apply" {% if request.path == '/apply' %}style="background:var(--sky)"{% endif %}>Executive position</a>
+  <a href="/apply/delegate" {% if request.path == '/apply/delegate' %}style="background:var(--sky)"{% endif %}>Delegate for my department</a>
+</nav>

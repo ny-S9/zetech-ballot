@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Run as delegate{% endblock %}
+{% block body %}
+{% set locked = mine and mine.status == 'approved' %}
+<div class="head"><div><h1>Run as delegate</h1>
+<p class="muted">Delegates represent their department in the electoral college and vote for the executives.</p></div>
+{% if mine %}<span class="pill {{ 'ok' if mine.status == 'approved' else 'bad' if mine.status == 'rejected' else 'warn' }}">{{ mine.status|capitalize }}</span>{% endif %}</div>
+{% include "_apply_tabs.html" %}
+{% if not me.department_name %}<div class="flash err">Your department isn't set yet. Ask the Dean's office to add it.</div>
+{% elif not can_apply and not locked %}<div class="flash err">Delegate applications are closed right now.</div>{% endif %}
+{% if locked %}<div class="flash ok">You're approved as a delegate candidate for {{ me.department_name }}. Your application is locked.</div>{% endif %}
+
+<div class="grid g2">
+<section class="card">
+  <h2>{{ 'Your application' if mine else 'New application' }}</h2>
+  <form method="post" action="/apply/delegate" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Department</label>
+    <input type="text" value="{{ me.department_name or 'Not set' }}" disabled>
+    <label for="st">Your statement</label>
+    <textarea id="st" name="statement" maxlength="800" required {{ 'disabled' if locked }} placeholder="Why should your department students choose you to represent them?">{{ form.statement if form else (mine.statement if mine else '') }}</textarea>
+    <label for="photo">Your photo</label>
+    <input id="photo" type="file" name="photo" accept=".png,.jpg,.jpeg,.webp" {{ 'disabled' if locked }}>
+    <p class="hint">{{ 'Already uploaded. Choose a file only to replace it.' if mine and mine.photo_path else 'A clear face photo. PNG, JPG or WEBP.' }}</p>
+    {% if not locked %}<button class="btn red" type="submit" {{ 'disabled' if not can_apply }}>{{ 'Save changes' if mine else 'Submit application' }}</button>{% endif %}
+  </form>
+</section>
+<section class="card">
+  <h2>How it works</h2>
+  <ol style="padding-left:20px;margin:0">
+    <li><b>Apply.</b> You apply for your own department, and only students from your department can vote for you.</li>
+    <li><b>Review.</b> The Dean's office approves your application.</li>
+    <li><b>Students vote.</b> Students vote for delegates of their own department.</li>
+    <li><b>Electoral college.</b> The top candidates of each department become delegates and vote for the executives.</li>
+  </ol>
+  {% if mine and mine.photo_path %}<img src="/uploads/{{ mine.photo_path }}" alt="Your uploaded photo" style="width:150px;height:150px;object-fit:cover;border-radius:24px;border:4px solid var(--sky);margin-top:16px">{% endif %}
+</section>
+</div>
+{% endblock %}

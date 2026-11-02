@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Control room{% endblock %}
+{% block body %}
+{% set st = election.status %}
+<div class="head"><div><h1>Control room</h1><p class="muted">Dean's office · {{ election.title }}</p></div>
+  <div class="refresh"><label title="Keeps the numbers and tables up to date every 15 seconds without reloading the page"><input type="checkbox" id="autoRefresh"> Live updates</label><span class="dot"></span><button type="button" class="btn sm ghost" id="refreshNow">Refresh now</button><span class="muted small" id="lastSync"></span>
+  <span class="pill {{ 'ok live' if st == 'open' else 'warn' if st == 'paused' else 'bad' }}">{{ 'Voting open' if st == 'open' else 'Paused' if st == 'paused' else 'Closed' }}</span></div></div>
+<nav class="subnav"><a href="#election">Election</a><a href="#delegates">Delegates</a><a href="#candidates">Executives</a><a href="#departments">Departments</a><a href="#voters">Voters</a><a href="#feedback">Feedback{% if stats.new_feedback %}<span class="badge">{{ stats.new_feedback }}</span>{% endif %}</a><a href="#audit">Audit log</a><a href="#settings">Settings</a></nav>
+
+<div class="stats">
+  <div class="stat"><b>{{ stats.t.pct }}%</b><span>Turnout ({{ stats.t.voters }} of {{ stats.t.total }})</span></div>
+  <div class="stat red"><b>{{ stats.votes }}</b><span>Votes cast</span></div>
+  <div class="stat"><b>{{ stats.pending }}</b><span>Applications waiting</span></div>
+  <div class="stat"><b>{{ stats.dapproved }}</b><span>Delegate candidates approved</span></div>
+  <div class="stat"><b>{{ stats.approved }}</b><span>Executive candidates approved</span></div>
+  <div class="stat"><b>{{ stats.delegates }}</b><span>Delegates declared</span></div>
+  <div class="stat"><b>{{ stats.activated }}/{{ stats.voters }}</b><span>Students activated</span></div>
+  <div class="stat red"><b>{{ stats.new_feedback }}</b><span>New messages from students</span></div>
+</div>
+
+<section class="card" id="election">
+  <h2>Election control</h2>
+  <p><span class="pill {{ 'ok' if election.stage == 'declared' else '' }}">{{ 'Stage 1: students vote for delegates' if election.stage == 'delegates' else 'Stage 2: delegates vote for executives' if election.stage == 'executives' else 'Finished: results declared' }}</span></p>
+  <p class="muted">Start voting for the current stage, stop it, then declare the results to move on. Voting stops new applications.</p>
+  <div class="ctrl">
+    <form method="post" action="/admin/election"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="open"><button class="btn" {{ 'disabled' if st == 'open' or election.stage == 'declared' }}>{{ 'Resume voting' if st == 'paused' else 'Start voting' }}</button></form>
+    <form method="post" action="/admin/election"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="pause"><button class="btn ghost" {{ 'disabled' if st != 'open' }}>Pause</button></form>
+    <form method="post" action="/admin/election" onsubmit="return confirm('Stop voting for this stage?')"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="close"><button class="btn red" {{ 'disabled' if st == 'closed' }}>Stop voting</button></form>
+    <a class="btn ghost" href="/admin/report.csv">Download report (CSV)</a>
+    <a class="btn ghost" href="/results">Open live results</a>
+  </div>
+  {% if election.stage != 'declared' %}
+  <form method="post" action="/admin/election" style="margin-top:20px" onsubmit="return confirm('Declare the results of this stage? This moves the election forward and cannot be undone.')">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="declare">
+    <label class="check" style="margin-bottom:12px"><input type="checkbox" name="force" value="1"><span>If there is a tie, break it by earliest application</span></label>
+    <button class="btn red" {{ 'disabled' if st != 'closed' }}>{{ 'Declare delegates' if election.stage == 'delegates' else 'Declare leaders' }}</button>
+    {% if st != 'closed' %}<span class="hint" style="margin-left:10px">Stop the voting first.</span>{% endif %}
+  </form>
+  {% endif %}
+  {% if election.stage == 'executives' and st != 'open' and stats.votes == 0 %}
+  <details style="margin-top:20px"><summary>Declared the wrong delegates? Re-declare the winners</summary>
+    <form method="post" action="/admin/election" class="inline" style="margin-top:12px" onsubmit="return confirm('Re-declare the delegates from the votes? The current list of delegates will be replaced. Votes, students and applications are not changed.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="redeclare">
+      <div><label for="rs">Delegates per department</label><input id="rs" name="seats" type="number" min="1" max="50" value="1" required></div>
+      <label class="check" style="margin:0"><input type="checkbox" name="force" value="1"><span>If there is a tie, break it by earliest application</span></label>
+      <button class="btn red">Re-declare winners</button>
+    </form>
+    <p class="hint" style="margin-top:10px">Use this when too many people were declared. It keeps only the top vote-getters of each department. Votes, students and applications are not changed. It is only possible before any executive vote is cast.</p>
+  </details>
+  {% endif %}
+  <details style="margin-top:20px"><summary>Start a new election</summary>
+    <form method="post" action="/admin/election" class="inline" style="margin-top:12px"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="new">
+      <div><label for="nt">Title</label><input id="nt" name="title" type="text" placeholder="Zetech University Student Elections 2027" required></div>
+      <button class="btn">Create election</button></form>
+    <p class="hint" style="margin-top:10px">The old election and its votes stay in the database. The new one starts at Stage 1 with zero votes.</p>
+  </details>
+</section>
+
+<section class="card" id="delegates">
+  <h2>Delegate applications</h2>
+  <p class="muted small">Students apply for delegate of their own department. Approve who goes on the Stage 1 ballot.</p>
+  <div class="filters" data-filter="#tblDelegates"><input type="search" placeholder="Search name, department…" aria-label="Search delegate applications">
+    <button type="button" class="chip-btn on" data-chip="all">All</button><button type="button" class="chip-btn" data-chip="pending">Pending</button><button type="button" class="chip-btn" data-chip="approved">Approved</button><button type="button" class="chip-btn" data-chip="rejected">Rejected</button><span class="count"></span></div>
+  <div class="tw"><table id="tblDelegates">
+    <thead><tr><th>Candidate</th><th>Department</th><th>Statement</th><th>Photo</th><th>Status</th><th>Decision</th></tr></thead>
+    <tbody>
+    {% for c in dcands %}
+    <tr data-status="{{ c.status }}">
+      <td><div style="display:flex;align-items:center;gap:10px"><span class="avatar">{% if c.photo_path %}<img src="/uploads/{{ c.photo_path }}" alt="">{% else %}{{ c.full_name|initials }}{% endif %}</span>
+        <div><b>{{ c.full_name }}</b><div class="small muted">{{ c.admission_number }}</div></div></div></td>
+      <td>{{ c.department_name }}</td>
+      <td style="max-width:260px"><details><summary>Read</summary><p class="small" style="margin-top:6px">{{ c.statement }}</p></details></td>
+      <td>{% if c.photo_path %}<a href="/uploads/{{ c.photo_path }}" target="_blank" rel="noopener">Photo</a>{% endif %}</td>
+      <td><span class="pill {{ 'ok' if c.status == 'approved' else 'bad' if c.status == 'rejected' else 'warn' }}">{{ c.status|capitalize }}</span></td>
+      <td><div class="acts">
+        <form method="post" action="/admin/delegate/{{ c.delegate_candidate_id }}/approve"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm" {{ 'disabled' if c.status == 'approved' }}>Approve</button></form>
+        <form method="post" action="/admin/delegate/{{ c.delegate_candidate_id }}/reject"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm red" {{ 'disabled' if c.status == 'rejected' }}>Reject</button></form>
+      </div></td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="muted center">No delegate applications yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+
+<section class="card" id="candidates">
+  <h2>Executive candidate applications</h2>
+  <div class="filters" data-filter="#tblCands"><input type="search" placeholder="Search name, position…" aria-label="Search executive applications">
+    <button type="button" class="chip-btn on" data-chip="all">All</button><button type="button" class="chip-btn" data-chip="pending">Pending</button><button type="button" class="chip-btn" data-chip="approved">Approved</button><button type="button" class="chip-btn" data-chip="rejected">Rejected</button><span class="count"></span></div>
+  <div class="tw"><table id="tblCands">
+    <thead><tr><th>Candidate</th><th>Position</th><th>Manifesto</th><th>Documents</th><th>Fees</th><th>Status</th><th>Decision</th></tr></thead>
+    <tbody>
+    {% for c in cands %}
+    <tr data-status="{{ c.status }}">
+      <td><div style="display:flex;align-items:center;gap:10px"><span class="avatar">{% if c.photo_path %}<img src="/uploads/{{ c.photo_path }}" alt="">{% else %}{{ c.full_name|initials }}{% endif %}</span>
+        <div><b>{{ c.full_name }}</b><div class="small muted">{{ c.admission_number }}</div></div></div></td>
+      <td>{{ c.position_name }}</td>
+      <td style="max-width:260px"><details><summary>Read</summary><p class="small" style="margin-top:6px">{{ c.manifesto }}</p></details></td>
+      <td>{% if c.photo_path %}<a href="/uploads/{{ c.photo_path }}" target="_blank" rel="noopener">Photo</a>{% endif %}
+          {% if c.results_path %} · <a href="/uploads/{{ c.results_path }}" target="_blank" rel="noopener">Results</a>{% endif %}</td>
+      <td><form method="post" action="/admin/candidate/{{ c.candidate_id }}/fee"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn sm ghost" title="Toggle fee verification">{{ 'Verified' if c.fee_compliance else 'Not verified' }}</button></form></td>
+      <td><span class="pill {{ 'ok' if c.status == 'approved' else 'bad' if c.status == 'rejected' else 'warn' }}">{{ c.status|capitalize }}</span></td>
+      <td><div class="acts">
+        <form method="post" action="/admin/candidate/{{ c.candidate_id }}/approve"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm" {{ 'disabled' if c.status == 'approved' }}>Approve</button></form>
+        <form method="post" action="/admin/candidate/{{ c.candidate_id }}/reject"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm red" {{ 'disabled' if c.status == 'rejected' }}>Reject</button></form>
+      </div></td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="muted center">No applications yet. They'll appear here as students apply.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+
+<section class="card" id="departments">
+  <h2>Departments (electoral colleges)</h2>
+  <p class="muted small">Each department sends this many delegates. Seats can change only before delegate voting starts.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Department</th><th>Students</th><th>Delegate seats</th></tr></thead>
+    <tbody>{% for dp in departments %}
+    <tr><td><b>{{ dp.department_name }}</b></td><td>{{ dp.n_students }}</td>
+      <td><form method="post" action="/admin/department/{{ dp.department_id }}/seats" class="inline" style="flex-wrap:nowrap">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><div style="flex:0 0 90px"><input name="seats" type="number" min="1" max="50" value="{{ dp.delegate_seats }}" aria-label="Seats for {{ dp.department_name }}"></div>
+        <button class="btn sm ghost">Save</button></form></td></tr>
+    {% endfor %}</tbody></table></div>
+  <details style="margin-top:16px"><summary>Add a department</summary>
+    <form method="post" action="/admin/department" class="inline" style="margin-top:12px"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <div><label for="dn">Name</label><input id="dn" name="name" type="text" required placeholder="Engineering"></div>
+      <div><label for="ds">Delegate seats</label><input id="ds" name="seats" type="number" min="1" max="50" value="1" required></div>
+      <button class="btn">Add department</button></form></details>
+</section>
+
+<section class="card" id="voters">
+  <h2>Voters</h2>
+  <details style="margin-bottom:16px"><summary>Add a student</summary>
+    <form method="post" action="/admin/student" class="inline" style="margin-top:12px"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <div><label>Admission number</label><input name="admission_number" type="text" required placeholder="DIT-03-0094/2026"></div>
+      <div><label>Full name</label><input name="full_name" type="text" required></div>
+      <div><label>Email</label><input name="email" type="email" required></div>
+      <div><label>Phone</label><input name="phone_number" type="tel" required></div>
+      <div><label>Department</label><select name="department_id" style="margin-bottom:0"><option value="">Not set</option>{% for dp in departments %}<option value="{{ dp.department_id }}">{{ dp.department_name }}</option>{% endfor %}</select></div>
+      <button class="btn">Add student</button></form></details>
+  <div class="filters" data-filter="#tblVoters"><input type="search" placeholder="Search name, admission number, department…" aria-label="Search voters">
+    <button type="button" class="chip-btn on" data-chip="all">All</button><button type="button" class="chip-btn" data-chip="active">Activated</button><button type="button" class="chip-btn" data-chip="inactive">Not activated</button><span class="count"></span></div>
+  <div class="tw"><table id="tblVoters">
+    <thead><tr><th>Admission no.</th><th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Account</th><th>Voted</th><th></th></tr></thead>
+    <tbody>{% for v in voters %}
+    <tr data-status="{{ 'active' if v.password else 'inactive' }}"><td>{{ v.admission_number }}</td><td><b>{{ v.full_name }}</b></td><td>{{ v.email }}</td><td>{{ v.phone_number }}</td>
+      <td><form method="post" action="/admin/student/{{ v.student_id }}/department" class="inline" style="flex-wrap:nowrap;gap:6px">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><div style="flex:1 1 auto"><select name="department_id" style="margin-bottom:0;padding:6px 10px" aria-label="Department for {{ v.full_name }}" onchange="this.form.submit()"><option value="">Not set</option>{% for dp in departments %}<option value="{{ dp.department_id }}" {{ 'selected' if dp.department_name == v.department_name }}>{{ dp.department_name }}</option>{% endfor %}</select></div></form></td>
+      <td><span class="pill {{ 'ok' if v.password else 'warn' }}">{{ 'Active' if v.password else 'Not activated' }}</span>{% if v.is_del %} <span class="pill">Delegate</span>{% endif %}</td>
+      <td>{{ 'Delegate vote: ' ~ ('yes' if v.dvoted else 'no') if election.stage == 'delegates' else (v.n_votes ~ '/' ~ n_positions if v.is_del else '-') }}</td>
+      <td><form method="post" action="/admin/student/{{ v.student_id }}/reset" onsubmit="return confirm('Reset this student\'s password? They will need to activate again.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Reset password</button></form></td></tr>
+    {% endfor %}</tbody></table></div>
+</section>
+
+<section class="card" id="feedback">
+  <div class="head" style="margin:0 0 10px"><div><h2 style="margin:0">Feedback and concerns</h2>
+    <p class="muted small" style="margin:4px 0 0">Messages from the Contact us page. Anonymous messages carry no name, no admission number and no login details, and their time is rounded to the hour.</p></div>
+    <a class="btn sm ghost" href="/admin/feedback.csv">Download (CSV)</a></div>
+  <div class="filters" data-filter="#tblFeedback"><input type="search" placeholder="Search messages…" aria-label="Search messages">
+    <button type="button" class="chip-btn on" data-chip="all">All</button><button type="button" class="chip-btn" data-chip="new">New</button><button type="button" class="chip-btn" data-chip="read">Read</button><button type="button" class="chip-btn" data-chip="resolved">Resolved</button><span class="count"></span></div>
+  <div class="tw"><table id="tblFeedback">
+    <thead><tr><th>Received</th><th>Type</th><th>From</th><th>Message</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for f in feedback %}
+    <tr data-status="{{ f.status }}">
+      <td style="white-space:nowrap">{{ f.created_at|eat }}</td>
+      <td>{{ f.category|capitalize }}</td>
+      <td>{% if f.is_anonymous %}<span class="who-anon">Anonymous</span>{% else %}<b>{{ f.sender_name or '(no name given)' }}</b>{% if f.sender_admission %}<div class="small muted">{{ f.sender_admission }}</div>{% endif %}<div class="small muted">as typed, not verified</div>{% endif %}</td>
+      <td><div class="msg">{{ f.message }}</div></td>
+      <td><span class="pill {{ 'bad' if f.status == 'new' else 'warn' if f.status == 'read' else 'ok' }}">{{ f.status|capitalize }}</span></td>
+      <td><div class="acts">
+        {% if f.status == 'new' %}<form method="post" action="/admin/feedback/{{ f.feedback_id }}/read"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Mark read</button></form>{% endif %}
+        {% if f.status != 'resolved' %}<form method="post" action="/admin/feedback/{{ f.feedback_id }}/resolved"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Resolve</button></form>
+        {% else %}<form method="post" action="/admin/feedback/{{ f.feedback_id }}/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Reopen</button></form>{% endif %}
+        <form method="post" action="/admin/feedback/{{ f.feedback_id }}/delete" onsubmit="return confirm('Delete this message for good?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm red">Delete</button></form>
+      </div></td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="muted center">No messages yet. They will appear here when students use Contact us.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+
+<section class="card" id="audit">
+  <h2>Audit log</h2>
+  <p class="muted small">The latest 80 actions, newest first. Times are East Africa Time. Votes are logged by position only, never by candidate.</p>
+  <div class="tw"><table>
+    <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
+    <tbody>{% for a in audit %}<tr><td style="white-space:nowrap">{{ a.logged_at|eat }}</td><td>{{ a.who or '-' }} <span class="small muted">{{ a.actor_role or '' }}</span></td><td><b>{{ a.action }}</b></td><td class="muted">{{ a.details or '' }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted center">Nothing logged yet.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+
+<section class="card" id="settings">
+  <h2>Change my password</h2>
+  <form method="post" action="/admin/password" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <div><label for="o">Current password</label><input id="o" name="old" type="password" required autocomplete="current-password"></div>
+    <div><label for="n">New password</label><input id="n" name="new" type="password" minlength="6" required autocomplete="new-password"></div>
+    <button class="btn">Change password</button></form>
+</section>
+{% endblock %}
